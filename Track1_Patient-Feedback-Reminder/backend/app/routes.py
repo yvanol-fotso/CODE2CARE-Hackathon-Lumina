@@ -1,25 +1,22 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-import app.models 
+import app.models
 from app.database import get_connection
 import asyncpg
 import logging
 from typing import List, Optional, Dict, Any
-import json 
-import httpx 
-import os 
+import json
+import httpx
+import os
 
-# Configuration du logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Récupération de l'URL de l'API AI depuis les variables d'environnement
 AI_API_URL = os.getenv("AI_API_URL")
 if not AI_API_URL:
     logger.error("AI_API_URL environment variable not set. AI analysis will not function.")
-   
-# --- Helpers pour l'appel à l'API AI externe ---
+
 async def call_ai_analysis_service(
     feedback_text: str,
     patient_id: Optional[str] = None,
@@ -56,14 +53,12 @@ async def call_ai_analysis_service(
             ai_request_body = {k: v for k, v in ai_request_body.items() if v is not None}
 
             response = await client.post(AI_API_URL, json=ai_request_body, timeout=30.0)
-            response.raise_for_status() 
+            response.raise_for_status()
             raw_ai_result = response.json()
 
-            # --- Parse la réponse brute de l'AI en utilisant les modèles Pydantic ---
             validated_overall_response = app.models.ExternalAIOverallResponse(**raw_ai_result)
             ai_response_content = validated_overall_response.data 
 
-            # Extraire les données pour notre AnalysisDataIn pour la colonne 'analysis' JSONB
             analysis_data_for_db = app.models.AnalysisDataIn(
                 primary_sentiment=ai_response_content.ai_analysis.primary_sentiment,
                 confidence_score=ai_response_content.ai_analysis.confidence_score,
@@ -73,7 +68,7 @@ async def call_ai_analysis_service(
                 contextual_factors=ai_response_content.ai_analysis.contextual_factors,
                 department_specific_insights=ai_response_content.ai_analysis.department_specific_insights,
                 emotional_intensity=ai_response_content.ai_analysis.emotional_intensity,
-                key_themes=ai_response_content.ai_analysis.key_themes, 
+                key_themes=ai_response_content.ai_analysis.key_themes,
                 patient_behavior_analysis=ai_response_content.ai_analysis.patient_behavior_analysis,
                 sentiment_explanation=ai_response_content.ai_analysis.sentiment_explanation,
                 urgency_level=ai_response_content.ai_analysis.urgency_level,
@@ -84,7 +79,6 @@ async def call_ai_analysis_service(
 
             recommendations_for_db = ai_response_content.recommendations
 
-            # Retourner un dictionnaire qui correspond à la structure attendue par AnalysisIn
             return {
                 "analysis": analysis_data_for_db.model_dump(mode='json'),
                 "recommendations": recommendations_for_db
@@ -120,7 +114,6 @@ async def create_feedback(
     """
     try:
         async with conn.transaction():
-            # Inclure les nouvelles colonnes dans l'insertion
             insert_query = """
                 INSERT INTO feedbacks (patient_id, text, note, emoji, patient_age, patient_gender, department, wait_time_min, resolution_time_min)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -178,8 +171,7 @@ async def create_feedback_and_analyze(
     """
     try:
         async with conn.transaction():
-            # 1. Sauvegarder le feedback
-            # Inclure les nouvelles colonnes dans l'insertion
+            # Sauvegarder le feedback
             insert_feedback_query = """
                 INSERT INTO feedbacks (patient_id, text, note, emoji, patient_age, patient_gender, department, wait_time_min, resolution_time_min)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -211,8 +203,7 @@ async def create_feedback_and_analyze(
                 timestamp=inserted_feedback_row["timestamp"]
             )
 
-            # Normalise les données pour l'appel au service AI
-            # Tous les champs de FeedbackIn sont passés à call_ai_analysis_service
+            # Préparer les données pour l'appel au service AI
             ai_input_data = {
                 "feedback_text": feedback.text.strip(),
                 "patient_id": feedback.patient_id.strip(),
@@ -224,21 +215,21 @@ async def create_feedback_and_analyze(
                 "rating": float(feedback.note) if feedback.note is not None else None
             }
 
-            # On Appele le service AI externe
+            # Appele le service AI externe
             ai_response_data_parsed = await call_ai_analysis_service(**ai_input_data)
 
-            # Convertion en modèle Pydantic AnalysisIn pour validation avant sauvegarde
+            # Convertir en modèle Pydantic AnalysisIn pour validation avant sauvegarde
             analysis_payload = app.models.AnalysisIn(**ai_response_data_parsed)
 
+            # add l'analyse et les recommandations dans la table ai_analysis
             insert_analysis_query = """
                 INSERT INTO ai_analysis (feedback_id, analysis, recommendations)
                 VALUES ($1, $2::jsonb, $3::jsonb)
                 RETURNING id, feedback_id, analysis, recommendations, analysis_timestamp;
             """
-            # Convertir le dictionnaire 'analysis' et la liste 'recommendations' en chaînes JSON
             inserted_analysis_row = await conn.fetchrow(
                 insert_analysis_query,
-                created_feedback.id, 
+                created_feedback.id,
                 json.dumps(analysis_payload.analysis.model_dump(mode='json')),
                 json.dumps(analysis_payload.recommendations) if analysis_payload.recommendations is not None else '[]'
             )
@@ -247,13 +238,28 @@ async def create_feedback_and_analyze(
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                                     detail="Échec de l'enregistrement de l'analyse IA.")
 
+            # Préparer les données d'analyse pour le modèle de sortie
+            analysis_data_raw = inserted_analysis_row["analysis"]
+            if isinstance(analysis_data_raw, str):
+                analysis_dict = json.loads(analysis_data_raw)
+            else: # Assume it's already a dict or None
+                analysis_dict = analysis_data_raw or {}
+
+            # Préparer les données de recommandations pour le modèle de sortie
+            recommendations_data_raw = inserted_analysis_row["recommendations"]
+            if isinstance(recommendations_data_raw, str):
+                recommendations_list = json.loads(recommendations_data_raw)
+            else: # Assume it's already a list or None
+                recommendations_list = recommendations_data_raw or []
+
             created_analysis = app.models.AnalysisOut(
                 feedback_id=inserted_analysis_row["feedback_id"],
-                analysis=app.models.AnalysisDataOut(**(json.loads(inserted_analysis_row["analysis"]) or {})), 
-                recommendations=inserted_analysis_row["recommendations"] if inserted_analysis_row["recommendations"] else [],
+                analysis=app.models.AnalysisDataOut(**analysis_dict),
+                recommendations=recommendations_list,
                 analysis_timestamp=inserted_analysis_row["analysis_timestamp"]
             )
 
+            # Retourner la réponse combinée
             return app.models.FeedbackAndAnalysisResponse(
                 feedback=created_feedback,
                 analysis=created_analysis
@@ -310,7 +316,7 @@ async def get_all_feedbacks(
         )
 
 # --- Route GET /feedback/{feedback_id} ---
-@router.get("/feedback/{feedback_id}", response_model=Dict[str, Any]) 
+@router.get("/feedback/{feedback_id}", response_model=Dict[str, Any])
 async def get_feedback_with_analysis(
     feedback_id: int,
     conn: asyncpg.Connection = Depends(get_connection)
@@ -319,7 +325,6 @@ async def get_feedback_with_analysis(
     Récupère un feedback spécifique et son analyse IA associée, si elle existe.
     """
     try:
-        # On Récupére le feedback brut
         feedback_row = await conn.fetchrow("""
             SELECT id, patient_id, text, note, emoji, timestamp, patient_age, patient_gender, department, wait_time_min, resolution_time_min
             FROM feedbacks
@@ -338,7 +343,6 @@ async def get_feedback_with_analysis(
             timestamp=feedback_row["timestamp"]
         )
 
-        # On Récupére l'analyse IA et les recommandations associées
         analysis_row = await conn.fetchrow("""
             SELECT analysis, recommendations, analysis_timestamp
             FROM ai_analysis
@@ -347,11 +351,24 @@ async def get_feedback_with_analysis(
 
         analysis_out = None
         if analysis_row:
-            analysis_data = json.loads(analysis_row["analysis"]) or {} 
+            # Désérialiser explicitement la chaîne JSON en dict
+            analysis_data_raw = analysis_row["analysis"]
+            if isinstance(analysis_data_raw, str):
+                analysis_dict = json.loads(analysis_data_raw)
+            else:
+                analysis_dict = analysis_data_raw or {}
+
+            # Désérialiser explicitement la chaîne JSON en liste
+            recommendations_data_raw = analysis_row["recommendations"]
+            if isinstance(recommendations_data_raw, str):
+                recommendations_list = json.loads(recommendations_data_raw)
+            else:
+                recommendations_list = recommendations_data_raw or []
+
             analysis_out = app.models.AnalysisOut(
                 feedback_id=feedback_id,
-                analysis=app.models.AnalysisDataOut(**analysis_data),
-                recommendations=analysis_row["recommendations"] if analysis_row["recommendations"] else [],
+                analysis=app.models.AnalysisDataOut(**analysis_dict),
+                recommendations=recommendations_list,
                 analysis_timestamp=analysis_row["analysis_timestamp"]
             )
 
@@ -383,7 +400,7 @@ async def analyze_and_save_feedback(
     """
     try:
         async with conn.transaction():
-            # Check si le feedback existe et récupérer son texte et autres données
+            # 1. Vérifier si le feedback existe et récupérer son texte et autres données
             feedback_row = await conn.fetchrow("""
                 SELECT text, patient_id, note, patient_age, patient_gender, department, wait_time_min, resolution_time_min
                 FROM feedbacks WHERE id = $1;
@@ -391,23 +408,21 @@ async def analyze_and_save_feedback(
             if feedback_row is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback introuvable.")
             
-            # Extraire les données du feedback pour l'appel AI
             feedback_text = feedback_row["text"]
             patient_id_from_db = feedback_row["patient_id"]
             note_from_db = feedback_row["note"]
-
             patient_age_from_db = feedback_row.get("patient_age")
             patient_gender_from_db = feedback_row.get("patient_gender")
             department_from_db = feedback_row.get("department")
             wait_time_min_from_db = feedback_row.get("wait_time_min")
             resolution_time_min_from_db = feedback_row.get("resolution_time_min")
 
-            # Check fier si une analyse existe déjà pour ce feedback_id
+            # 2. Vérifier si une analyse existe déjà pour ce feedback_id
             analysis_exists = await conn.fetchval("SELECT id FROM ai_analysis WHERE feedback_id = $1;", feedback_id)
             if analysis_exists is not None:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Une analyse existe déjà pour ce feedback.")
 
-            # Call le service AI externe avec les données contextuelles disponibles
+            # 3. Appeler le service AI externe avec les données contextuelles disponibles
             ai_response_data_parsed = await call_ai_analysis_service(
                 feedback_text=feedback_text,
                 patient_id=patient_id_from_db,
@@ -422,13 +437,12 @@ async def analyze_and_save_feedback(
             # Convertir en modèle Pydantic AnalysisIn pour validation avant sauvegarde
             analysis_payload = app.models.AnalysisIn(**ai_response_data_parsed)
 
-            # Save l'analyse et les recommandations dans la table ai_analysis
+            # 4. Insérer l'analyse et les recommandations dans la table ai_analysis
             insert_query = """
                 INSERT INTO ai_analysis (feedback_id, analysis, recommendations)
                 VALUES ($1, $2::jsonb, $3::jsonb)
                 RETURNING id, feedback_id, analysis, recommendations, analysis_timestamp;
             """
-            # Convertion le dictionnaire 'analysis' et la liste 'recommendations' en chaînes JSON
             inserted_row = await conn.fetchrow(
                 insert_query,
                 feedback_id,
@@ -440,10 +454,24 @@ async def analyze_and_save_feedback(
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                                     detail="Échec de l'enregistrement de l'analyse IA.")
 
+            # Préparer les données d'analyse pour le modèle de sortie
+            analysis_data_raw = inserted_row["analysis"]
+            if isinstance(analysis_data_raw, str):
+                analysis_dict = json.loads(analysis_data_raw)
+            else:
+                analysis_dict = analysis_data_raw or {}
+
+            # Préparer les données de recommandations pour le modèle de sortie
+            recommendations_data_raw = inserted_row["recommendations"]
+            if isinstance(recommendations_data_raw, str):
+                recommendations_list = json.loads(recommendations_data_raw)
+            else:
+                recommendations_list = recommendations_data_raw or []
+
             return app.models.AnalysisOut(
                 feedback_id=inserted_row["feedback_id"],
-                analysis=app.models.AnalysisDataOut(**(json.loads(inserted_row["analysis"]) or {})),
-                recommendations=inserted_row["recommendations"] if inserted_row["recommendations"] else [],
+                analysis=app.models.AnalysisDataOut(**analysis_dict),
+                recommendations=recommendations_list,
                 analysis_timestamp=inserted_row["analysis_timestamp"]
             )
 
@@ -479,12 +507,25 @@ async def get_all_analyses(
 
         insights = []
         for row in rows:
-            analysis_data = json.loads(row["analysis"]) or {} 
+            # Désérialiser explicitement la chaîne JSON en dict
+            analysis_data_raw = row["analysis"]
+            if isinstance(analysis_data_raw, str):
+                analysis_dict = json.loads(analysis_data_raw)
+            else:
+                analysis_dict = analysis_data_raw or {}
+
+            # Désérialiser explicitement la chaîne JSON en liste
+            recommendations_data_raw = row["recommendations"]
+            if isinstance(recommendations_data_raw, str):
+                recommendations_list = json.loads(recommendations_data_raw)
+            else:
+                recommendations_list = recommendations_data_raw or []
+
             insights.append(
                 app.models.AnalysisOut(
                     feedback_id=row["feedback_id"],
-                    analysis=app.models.AnalysisDataOut(**analysis_data),
-                    recommendations=row["recommendations"] if row["recommendations"] else [],
+                    analysis=app.models.AnalysisDataOut(**analysis_dict),
+                    recommendations=recommendations_list,
                     analysis_timestamp=row["analysis_timestamp"]
                 )
             )
@@ -519,7 +560,13 @@ async def get_all_recommendations(
         recommendations_list = []
         for row in rows:
             feedback_id = row["feedback_id"]
-            recommendations_jsonb = json.loads(row["recommendations"]) if row["recommendations"] else []
+            # Désérialiser explicitement la chaîne JSON en list
+            recommendations_jsonb_raw = row["recommendations"]
+            if isinstance(recommendations_jsonb_raw, str):
+                recommendations_jsonb = json.loads(recommendations_jsonb_raw)
+            else:
+                recommendations_jsonb = recommendations_jsonb_raw or []
+            
             timestamp = row["analysis_timestamp"]
 
             if recommendations_jsonb and isinstance(recommendations_jsonb, list):
@@ -540,7 +587,7 @@ async def get_all_recommendations(
             detail=f"Erreur serveur lors de l'extraction des recommandations: {e}"
         )
 
-# --- ROUTES: Demandes de Rappel / reminder ---
+# --- NOUVELLES ROUTES: Demandes de Rappel ---
 
 @router.post("/recall-requests", status_code=status.HTTP_201_CREATED, response_model=app.models.RecallRequestOut)
 async def create_recall_request(
@@ -619,7 +666,7 @@ async def get_all_recall_requests(
 
 @router.get("/recall-requests/{request_id}", response_model=app.models.RecallRequestOut)
 async def get_recall_request_by_id(
-    request_id: int,
+    request_id: int, # Bon parameter name
     conn: asyncpg.Connection = Depends(get_connection)
 ):
     """
@@ -630,7 +677,7 @@ async def get_recall_request_by_id(
             SELECT id, patient_id, request_object, requested_date, request_timestamp, status, approved_by, approval_date
             FROM recall_requests
             WHERE id = $1;
-        """, request_id)
+        """, request_id) # On passe request_id icci
 
         if not row:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande de rappel introuvable.")
@@ -639,9 +686,9 @@ async def get_recall_request_by_id(
     except HTTPException as http_err:
         raise http_err
     except Exception as e:
-        logger.exception(f"Erreur lors de la récupération du message personnalisé ID {message_id}.")
+        logger.exception(f"Erreur lors de la récupération de la demande de rappel ID {request_id}.") # Use request_id here
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Erreur serveur lors de la récupération du message personnalisé: {e}"
+                            detail=f"Erreur serveur lors de la récupération de la demande de rappel: {e}"
         )
 
 @router.put("/recall-requests/{request_id}/status", response_model=app.models.RecallRequestOut)
@@ -688,7 +735,7 @@ async def update_recall_request_status(
                             detail=f"Erreur serveur lors de la mise à jour du statut: {e}"
         )
 
-# --- NOUVELLES ROUTES: Messages Personnalisés ---
+# ---  ROUTES: Messages Personnalisés ---
 
 @router.post("/personalized-messages", status_code=status.HTTP_201_CREATED, response_model=app.models.PersonalizedMessageOut)
 async def create_personalized_message(
