@@ -15,9 +15,11 @@
 
 
 # ############################## PostgreSQL #############################
+
 import asyncpg
 from dotenv import load_dotenv
 import os
+import json 
 
 load_dotenv()
 
@@ -27,7 +29,7 @@ DB_NAME = os.getenv("DB_NAME_POSTGRES")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
-_db_pool = None
+_db_pool = None 
 
 async def get_database_connection_pool():
     """
@@ -43,8 +45,8 @@ async def get_database_connection_pool():
                 database=DB_NAME,
                 user=DB_USER,
                 password=DB_PASSWORD,
-                min_size=5,  
-                max_size=10  
+                min_size=5, 
+                max_size=10 
             )
             print("Pool de connexions PostgreSQL créé avec succès.")
 
@@ -58,27 +60,61 @@ async def get_database_connection_pool():
                             text TEXT NOT NULL,
                             note INTEGER,
                             emoji TEXT,
-                            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            patient_age REAL, 
+                            patient_gender TEXT,
+                            department TEXT,
+                            wait_time_min REAL,
+                            resolution_time_min REAL
                         );
                     """)
                     print("Table 'feedbacks' vérifiée/créée.")
 
-                    # Table des analyses IA
                     await conn.execute("""
                         CREATE TABLE IF NOT EXISTS ai_analysis (
                             id SERIAL PRIMARY KEY,
                             feedback_id INTEGER REFERENCES feedbacks(id) ON DELETE CASCADE,
                             analysis JSONB,
+                            recommendations JSONB,
                             analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         );
                     """)
-                    print("Table 'ai_analysis' vérifiée/créée.")
+                    print("Table 'ai_analysis' vérifiée/créée analysis et recommendations JSONB.")
 
-            print("Base de données prête : tables 'feedbacks' et 'ai_analysis' configurées.")
+                    # Table des demandes de rappel/rendez-vous
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS recall_requests (
+                            id SERIAL PRIMARY KEY,
+                            patient_id TEXT NOT NULL,
+                            request_object TEXT NOT NULL, 
+                            requested_date DATE, 
+                            request_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            status TEXT DEFAULT 'pending', -- Status of the request: 'pending', 'approved', 'rejected', 'completed'
+                            approved_by TEXT,
+                            approval_date TIMESTAMP 
+                        );
+                    """)
+                    print("Table 'recall_requests' vérifiée/créée.")
+
+                    # Table des messages personnalisés API 
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS personalized_messages (
+                            id SERIAL PRIMARY KEY,
+                            recall_request_id INTEGER REFERENCES recall_requests(id) ON DELETE CASCADE,
+                            patient_id TEXT NOT NULL,
+                            message_content TEXT NOT NULL,
+                            sent_by TEXT NOT NULL, 
+                            sent_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            ai_message_analysis JSONB 
+                        );
+                    """)
+                    print("Table 'personalized_messages' vérifiée/créée.")
+
+            print("Base de données prête : toutes les tables configurées.")
 
         except Exception as e:
             print(f"Erreur lors de la création du pool ou de l'initialisation des tables : {e}")
-            _db_pool = None
+            _db_pool = None 
             raise 
 
     return _db_pool
@@ -99,10 +135,11 @@ async def get_connection():
     global _db_pool
     if _db_pool is None:
         _db_pool = await get_database_connection_pool()
-        if _db_pool is None: 
+        if _db_pool is None:
             raise RuntimeError("Le pool de base de données n'a pas pu être initialisé.")
+
     conn = await _db_pool.acquire()
     try:
         yield conn 
     finally:
-        await _db_pool.release(conn) 
+        await _db_pool.release(conn)
