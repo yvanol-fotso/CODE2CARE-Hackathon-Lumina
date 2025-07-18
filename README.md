@@ -1,5 +1,3 @@
-"# CODE2CARE Hackathon - Team Lumina" 
-
 # CODE2CARE Hackathon – Team Lumina
 
 Bienvenue dans le dépôt officiel de l'équipe **Lumina** pour le **Hackathon CODE2CARE** organisé par le Douala General Hospital et Data Science Without Borders.
