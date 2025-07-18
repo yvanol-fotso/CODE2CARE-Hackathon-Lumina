@@ -1,4 +1,3 @@
-"# AI-Enhanced Blood Bank Monitoring"
 
 # Track 3 – Blood Bank AI Monitoring and Forecasting
 

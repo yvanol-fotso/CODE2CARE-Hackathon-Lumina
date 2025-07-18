@@ -1,5 +1,4 @@
-"# Patient Feedback and Reminder System" 
-
+ 
 # Track 1 – Patient Feedback and Reminder System
 
 ## Objectif
@@ -11,10 +10,10 @@ Développer un système intégré capable de :
 - Fonctionner même en connexion faible (low-bandwidth)
 
 ## Technologies envisagées
-- Frontend : React Native / Flutter
-- Backend : Node.js / Django
+- Frontend : Next js/ Sveltkit
+- Backend : FastApi / Flask
 - NLP : spaCy, Transformers, Hugging Face
-- Sentiment Analysis : Vader, TextBlob, fine-tuned BERT
+- Sentiment Analysis :Llama 3 ,  Deepseek, fine-tuned BERT
 - Multilingue : Google Translate API, TTS/STT (Coqui, Whisper)
 
 ## TODO
@@ -24,3 +23,4 @@ Développer un système intégré capable de :
 - [ ] Envoi intelligent des rappels
 - [ ] Intégration multilingue
 
+ 

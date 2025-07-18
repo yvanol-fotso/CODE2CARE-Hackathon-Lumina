@@ -1,5 +1,3 @@
-"# LLM for Patient Education and Support" 
-
 # Track 2 – LLM for Patient Education and Support
 
 ## Objectif
