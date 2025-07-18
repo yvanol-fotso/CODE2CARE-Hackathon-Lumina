@@ -53,10 +53,6 @@ uvicorn main:app --reload
 
 ## Acceder au docs
 
-
-## Endpoints API POST /feedbackCréer un nouveau feedback patient.Requête JSON :
-
-
 ## Sommaire
 
 - [Feedback et Analyse IA](#feedback-et-analyse-ia)
@@ -82,6 +78,33 @@ uvicorn main:app --reload
  Description  des différentes routes disponibles dans l'API, leurs fonctionnalités, les formats de requête et de réponse attendus.
 
 ---
+
+## Endpoints API POST /feedback Créer un nouveau feedback patient.Requête JSON :
+
+### POST /feedback
+This endpoint allows you to record a new patient feedback entry directly into the database.
+
+Request Body (application/json):
+
+The request body should be a JSON object containing the feedback details:
+
+**Requête JSON :**
+```json
+
+{
+  "patient_id": "string",          
+  "text": "string",                
+  "note": float,                  
+  "emoji": "string",              
+  "patient_age": float,            
+  "patient_gender": "string",     
+  "department": "string",          
+  "wait_time_min": float,         
+  "resolution_time_min": float
+}
+```
+
+-----
 
 ## Feedback et Analyse IA
 
