@@ -1,0 +1,12 @@
+Flask
+Flask-Caching
+PyPDF2
+langchain
+langchain-google-genai
+langchain-community
+faiss-cpu
+pandas
+python-dotenv
+gunicorn
+Werkzeug
+twilio
