@@ -1,0 +1,2 @@
+in respect of ui principles ; refraktor and beautify this component . don't use colors that'll attack peoples with eyes problems . refraktor the entire component , cards, alignments, the way things are being displayed. reorganise the entire component also add a place for the logo... " do it best mobile screen ever designed .. in react native mobile app 
+
