@@ -145,6 +145,13 @@ Crée un nouveau feedback patient et déclenche son analyse IA.
 }
 ```
 
+# Résultats d'analyse de sentiment
+
+## Sentiment Négatif
+![Exemple de sortie pour un sentiment négatif](test_swagger_images/1.png)
+
+## Sentiment Positif
+![Exemple de sortie pour un sentiment positif](test_swagger_images/2.png)
 -----
 
 ### `GET /feedbacks`
