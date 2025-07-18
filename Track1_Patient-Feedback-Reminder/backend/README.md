@@ -2,32 +2,28 @@
 
 Ce backend FastAPI est le cœur du projet Track 1 du hackathon CODE2CARE, développé par l'équipe **Lumina**. Il est conçu pour une gestion efficace des retours patients et, à terme, des rappels multilingues.
 
+---
+
 ## ✨ Fonctionnalités
 
 Ce service permet de :
 * **Collecter les retours patients** : Saisie de feedbacks sous forme de texte, de notes numériques et d'emojis.
-* **Stocker les données** : Centralisation sécurisée des feedbacks dans une base de données MongoDB.
+* **Stocker les données** : Centralisation sécurisée des feedbacks dans une base de données.
 * **Récupérer les informations** : Accès simplifié aux feedbacks via une API robuste.
 * **(À venir) Gérer les rappels multilingues** : Fonctionnalités futures pour l'envoi de rappels par SMS et e-mail.
+
+---
 
 ## 🚀 Stack Technique
 
 Le projet s'appuie sur les technologies suivantes :
 * **FastAPI** : Un framework Python moderne, rapide et performant pour la construction d'APIs.
-* **MongoDB** : Une base de données NoSQL flexible, idéale pour stocker des données non structurées comme les feedbacks.
+* **PostgreSQL** : Une base de données relationnelle robuste et open-source, idéale pour stocker des données structurées comme les feedbacks.
 * **Uvicorn** : Un serveur ASGI ultra-rapide, essentiel pour exécuter les applications FastAPI.
 * **Python-dotenv** : Pour une gestion sécurisée et efficace des variables d'environnement (ex: clés API, identifiants de connexion).
 
-## 📁 Structure du Projet
-
-# 🧠 Backend - Track 1: Patient Feedback & Reminder System
-
-Ce backend FastAPI est le cœur du projet Track 1 du hackathon CODE2CARE, développé par l'équipe **Lumina**. Il est conçu pour une gestion efficace des retours patients et, à terme, des rappels multilingues.## ✨ Fonctionnalités
-
-Ce service permet de :* **Collecter les retours patients** : Saisie de feedbacks sous forme de texte, de notes numériques et d'emojis.* **Stocker les données** : Centralisation sécurisée des feedbacks dans une base de données MongoDB.* **Récupérer les informations** : Accès simplifié aux feedbacks via une API robuste.* **(À venir) Gérer les rappels multilingues** : Fonctionnalités futures pour l'envoi de rappels par SMS et e-mail.## 🚀 Stack Technique
-
-Le projet s'appuie sur les technologies suivantes :* **FastAPI** : Un framework Python moderne, rapide et performant pour la construction d'APIs.* **MongoDB** : Une base de données NoSQL flexible, idéale pour stocker des données non structurées comme les feedbacks.* **Uvicorn** : Un serveur ASGI ultra-rapide, essentiel pour exécuter les applications FastAPI.* **Python-dotenv** : Pour une gestion sécurisée et efficace des variables d'environnement (ex: clés API, identifiants de connexion).
 ---
+
 
 ## ⚙️ Installation et Lancement
 
